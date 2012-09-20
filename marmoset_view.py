@@ -5,6 +5,8 @@ marmoset_view.py
 
 import argparse
 import getpass
+import os.path
+import sys
 
 import mechanize
 import BeautifulSoup
@@ -18,16 +20,31 @@ if (__name__ == '__main__'):
     parser.add_argument('--user', default=getpass.getuser())
     args = parser.parse_args()
 
-    password = getpass.getpass()
-
     br = mechanize.Browser()
 
+    ## Try to re-use cookies to skip login
+    cookie_file = os.path.expanduser('~/.marmosetcookies')
+    cj = mechanize.LWPCookieJar()
+    br.set_cookiejar(cj)
+    try:
+        cj.load(cookie_file, ignore_discard=True)
+    except IOError:
+        pass
+
     ## CAS login
-    br.open("https://marmoset.student.cs.uwaterloo.ca/")
-    br.select_form(nr=0)
-    br['username'] = args.user
-    br['password'] = password
-    br.submit()
+    page = br.open("https://marmoset.student.cs.uwaterloo.ca/").read()
+    if 'Welcome to the University of Waterloo Central Authentication Service.' in page:
+        password = getpass.getpass()
+        br.select_form(nr=0)
+        br['username'] = args.user
+        br['password'] = password
+        response = br.submit().read()
+
+        if "Your userid and/or your password are incorrect" in response:
+            print "Your userid and/or your password are incorrect"
+            sys.exit(1)
+
+        cj.save(cookie_file, ignore_discard=True)
 
     ## Marmoset auth
     br.select_form('PerformLogin')
